@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0f766e">
+    <title>Downtime Monitor WebBLE</title>
+    <meta
+      name="description"
+      content="Web Bluetooth dashboard for ESP32 industrial downtime monitoring."
+    >
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">ESP32 machine monitor</p>
+          <h1>Downtime Monitor</h1>
+        </div>
+        <div class="topbar-actions">
+          <span id="secureBadge" class="badge neutral">Secure context</span>
+          <span id="bleSupportBadge" class="badge neutral">Checking BLE</span>
+          <span id="connectionBadge" class="badge off">Disconnected</span>
+        </div>
+      </header>
+
+      <section class="control-strip" aria-label="Device controls">
+        <button id="connectButton" class="primary-action" type="button">
+          Connect Device
+        </button>
+        <button id="disconnectButton" class="ghost-action" type="button" disabled>
+          Disconnect
+        </button>
+        <div class="device-name">
+          <span>Device</span>
+          <strong id="deviceName">Not selected</strong>
+        </div>
+      </section>
+
+      <section class="identity-panel panel" aria-label="Device identity">
+        <div class="identity-main">
+          <span class="metric-label">Connected Device</span>
+          <strong id="deviceIdValue">--</strong>
+          <span id="deviceConnState" class="conn-chip off">Disconnected</span>
+          <p id="deviceModel">Connect to EF-001 to read device identity</p>
+        </div>
+        <dl class="identity-grid">
+          <div>
+            <dt>BLE Name</dt>
+            <dd id="advertisedNameValue">Not selected</dd>
+          </div>
+          <div>
+            <dt>Installed Location</dt>
+            <dd id="installedLocationValue">Not available</dd>
+          </div>
+          <div>
+            <dt>Associated Machine</dt>
+            <dd id="associatedMachineValue">Not assigned</dd>
+          </div>
+          <div>
+            <dt>Firmware</dt>
+            <dd id="firmwareValue">--</dd>
+          </div>
+          <div>
+            <dt>Hardware</dt>
+            <dd id="hardwareValue">ESP32-WROOM-D</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="status-grid" aria-label="Live machine status">
+        <article class="metric-card current-card">
+          <span class="metric-label">Current</span>
+          <strong id="currentValue">--</strong>
+          <span class="metric-unit">amp RMS</span>
+          <canvas
+            id="currentGauge"
+            class="gauge-canvas"
+            width="220"
+            height="120"
+            aria-label="Current gauge"
+          ></canvas>
+        </article>
+
+        <article class="metric-card">
+          <span class="metric-label">Machine State</span>
+          <strong id="machineState" class="state-text stopped">STOPPED</strong>
+          <span id="stateReason" class="subvalue">Waiting for device</span>
+        </article>
+
+        <article class="metric-card">
+          <span class="metric-label">RTC Time</span>
+          <strong id="rtcTime">--:--:--</strong>
+          <span id="rtcDate" class="subvalue">No RTC data</span>
+        </article>
+
+        <article class="metric-card">
+          <span class="metric-label">Stored Logs</span>
+          <strong id="logCount">0</strong>
+          <span id="syncStatusText" class="subvalue">No sync pending</span>
+        </article>
+      </section>
+
+      <section
+        id="healthBanner"
+        class="health-banner hidden"
+        role="status"
+        aria-live="polite"
+      >
+        <strong id="healthBannerTitle">Front-end check</strong>
+        <span id="healthBannerText"></span>
+      </section>
+
+      <section class="main-grid">
+        <section class="panel trend-panel" aria-label="Current trend">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Live sampling</p>
+              <h2>Current Trend</h2>
+            </div>
+            <span id="lastUpdate">No update</span>
+          </div>
+          <canvas
+            id="trendCanvas"
+            class="trend-canvas"
+            width="920"
+            height="320"
+            aria-label="Current trend chart"
+          ></canvas>
+        </section>
+
+        <section class="panel runtime-panel" aria-label="Runtime summary">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Current shift</p>
+              <h2>Runtime</h2>
+            </div>
+          </div>
+          <div class="runtime-list">
+            <div class="runtime-row">
+              <span class="dot run"></span>
+              <span>Active</span>
+              <strong id="activeDuration">00:00:00</strong>
+            </div>
+            <div class="runtime-row">
+              <span class="dot stopped"></span>
+              <span>Idle</span>
+              <strong id="idleDuration">00:00:00</strong>
+            </div>
+          </div>
+          <canvas
+            id="runtimeCanvas"
+            class="runtime-canvas"
+            width="260"
+            height="260"
+            aria-label="Runtime split chart"
+          ></canvas>
+        </section>
+      </section>
+
+      <section id="downtimeAnalysis" class="analysis-section" aria-label="Downtime analysis">
+        <div class="analysis-header">
+          <div class="analysis-title">
+            <span class="analysis-icon" aria-hidden="true">▥</span>
+            <div>
+              <h2>Downtime Analysis</h2>
+              <p>Analyze idle time patterns and reasons to identify improvement opportunities</p>
+            </div>
+          </div>
+          <div class="analysis-actions">
+            <label class="date-filter">Date range
+              <span class="date-range-inputs">
+                <input id="analysisStartDate" type="date" aria-label="Analysis start date">
+                <span aria-hidden="true">–</span>
+                <input id="analysisEndDate" type="date" aria-label="Analysis end date">
+              </span>
+            </label>
+            <button id="exportAnalysisCsv" class="export-button export-csv" type="button">▦ Export CSV</button>
+            <button id="exportAnalysisPdf" class="export-button export-pdf" type="button">▤ Export PDF</button>
+          </div>
+        </div>
+
+        <div class="analysis-kpis">
+          <article class="analysis-kpi"><span class="kpi-icon blue">◷</span><div><span class="kpi-label">Total Downtime</span><strong id="analysisDowntime">—</strong><small>Selected period</small></div></article>
+          <article class="analysis-kpi"><span class="kpi-icon green">▶</span><div><span class="kpi-label">Total Runtime</span><strong id="analysisRuntime">—</strong><small>Selected period</small></div></article>
+          <article class="analysis-kpi"><span class="kpi-icon purple">■</span><div><span class="kpi-label">Total Stoppages</span><strong id="analysisStoppages">—</strong><small>IDLE intervals</small></div></article>
+          <article class="analysis-kpi"><span class="kpi-icon orange">◔</span><div><span class="kpi-label">Machine Availability</span><strong id="analysisAvailability">—</strong><small>Runtime ÷ recorded time</small></div></article>
+        </div>
+
+        <div class="analysis-charts">
+          <article class="analysis-chart-card">
+            <div class="analysis-card-heading"><div><h3>Hourly Downtime Trend</h3><p>Total idle time for each hour</p></div><label class="day-filter">Day <select id="analysisDaySelect" aria-label="Day for hourly downtime"><option value="all">All selected days</option></select></label></div>
+            <div id="hourlyDowntimeChart" class="hourly-chart" role="img" aria-label="Hourly downtime bar chart"><p class="analysis-empty">Load timestamped device logs to see hourly downtime.</p></div>
+            <p class="chart-axis-label">Hour of day · downtime (minutes)</p>
+          </article>
+          <article class="analysis-chart-card">
+            <div class="analysis-card-heading"><div><h3>Loss by Reason</h3><p>Total idle time categorized by assigned reason</p></div></div>
+            <div id="lossByReasonChart" class="reason-chart" role="img" aria-label="Downtime by reason bar chart"><p class="analysis-empty">Load device logs and assign stoppage reasons to see the breakdown.</p></div>
+            <p class="chart-axis-label">Idle time (minutes)</p>
+          </article>
+        </div>
+        <p id="analysisDataNote" class="analysis-note">Analysis uses timestamped records received from the device. No sample data is added.</p>
+      </section>
+
+      <section class="tool-grid">
+        <section class="panel" aria-label="Configuration">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Device setup</p>
+              <h2>Thresholds</h2>
+            </div>
+            <button id="readConfigButton" class="small-action" type="button">
+              Read
+            </button>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              Machine ID
+              <input id="machineIdInput" type="text" value="MACHINE-001">
+            </label>
+            <label>
+              Active threshold (A)
+              <input id="thresholdInput" type="number" min="0" step="0.1" value="1.0">
+            </label>
+            <label>
+              Debounce (s)
+              <input id="debounceInput" type="number" min="1" step="1" value="5">
+            </label>
+          </div>
+
+          <div class="button-row">
+            <button id="saveConfigButton" class="secondary-action" type="button">
+              Save Config
+            </button>
+            <button id="syncRtcButton" class="ghost-action" type="button">
+              Sync RTC
+            </button>
+          </div>
+        </section>
+
+        <section class="panel" aria-label="Wi-Fi and cloud sync">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Hotspot upload</p>
+              <h2>Wi-Fi and MQTT</h2>
+            </div>
+            <span id="wifiState" class="small-status">Idle</span>
+          </div>
+
+          <div class="button-row">
+            <button id="scanWifiButton" class="secondary-action" type="button">
+              Scan Wi-Fi
+            </button>
+            <button id="syncCloudButton" class="primary-action" type="button">
+              Sync Cloud
+            </button>
+          </div>
+
+          <div class="form-grid wifi-form">
+            <label>
+              Network
+              <select id="wifiSelect">
+                <option value="">No networks scanned</option>
+              </select>
+            </label>
+            <label>
+              Password
+              <span class="password-field">
+                <input id="wifiPasswordInput" type="password" autocomplete="current-password">
+                <button
+                  id="wifiPasswordToggle"
+                  class="password-toggle"
+                  type="button"
+                  aria-label="Show password"
+                  aria-pressed="false"
+                >Show</button>
+              </span>
+            </label>
+          </div>
+
+          <button id="connectWifiButton" class="ghost-action full-width" type="button">
+            Connect Hotspot
+          </button>
+
+          <div class="progress-track" aria-label="Sync progress">
+            <span id="syncProgressBar"></span>
+          </div>
+          <p id="syncDetail" class="compact-text">Waiting for sync command</p>
+        </section>
+      </section>
+
+      <section class="panel logs-panel" aria-label="Stored logs">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Flash storage</p>
+            <h2>Stored Logs</h2>
+          </div>
+          <div class="button-row">
+            <button id="requestLogsButton" class="secondary-action" type="button">
+              Refresh Logs
+            </button>
+            <button id="exportLogsButton" class="ghost-action" type="button">
+              Export CSV
+            </button>
+            <button id="clearSyncedButton" class="danger-action" type="button">
+              Clear Synced
+            </button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Start</th>
+                <th>Machine</th>
+                <th>State</th>
+                <th>Current</th>
+                <th>Duration</th>
+                <th>Stoppage Reason</th>
+                <th>Sync</th>
+              </tr>
+            </thead>
+            <tbody id="logsTableBody">
+              <tr>
+                <td colspan="7">No logs loaded</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel event-panel" aria-label="Event console">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Session</p>
+            <h2>Events</h2>
+          </div>
+          <button id="clearEventsButton" class="small-action" type="button">
+            Clear
+          </button>
+        </div>
+        <ol id="eventList" class="event-list"></ol>
+      </section>
+    </main>
+
+    <template id="eventTemplate">
+      <li>
+        <time></time>
+        <span></span>
+      </li>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
