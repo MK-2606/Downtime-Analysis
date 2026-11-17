@@ -186,13 +186,8 @@ async function connectDevice() {
     logEvent("Opening Bluetooth device picker");
 
     const device = await navigator.bluetooth.requestDevice({
-      filters: [
-        { namePrefix: "EF-", services: [BLE.service] },
-        { services: [BLE.service] },
-        { namePrefix: "DTM-" },
-        { namePrefix: "Downtime" },
-      ],
-      optionalServices: [BLE.service],
+    acceptAllDevices: true,
+    optionalServices: [BLE.service]
     });
 
     state.device = device;
